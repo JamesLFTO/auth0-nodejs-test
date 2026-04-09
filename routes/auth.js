@@ -51,6 +51,7 @@ router.get('/login/institution/', passport.authenticate('auth0', {
 router.get('/login/acsfederate/', passport.authenticate('auth0', {
   scope: 'openid email profile',
   connection:'ACSFederate',
+  prompt: 'login',
 }), function (req, res) {
   res.redirect('/');
 });
