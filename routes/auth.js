@@ -32,6 +32,13 @@ router.get('/login/xchem-federate/', passport.authenticate('auth0', {
   res.redirect('/');
 });
 
+router.get('/login/benjamin-moore-paints-federate/', passport.authenticate('auth0', {
+  scope: 'openid email profile',
+  connection:'benjamin-moore-paints-federate',
+}), function (req, res) {
+  res.redirect('/');
+});
+
 router.get('/login/milliken-and-federate/', passport.authenticate('auth0', {
   scope: 'openid email profile',
   connection:'milliken-and-federate',
