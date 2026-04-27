@@ -50,6 +50,7 @@ router.get('/login/milliken-and-federate/', passport.authenticate('auth0', {
 router.get('/login/institution/', passport.authenticate('auth0', {
   scope: 'openid email profile',
   connection:'cirrus',
+  prompt:'login',
 }), function (req, res) {
   res.redirect('/');
 });
@@ -116,13 +117,14 @@ router.get('/logout', (req, res, next) => {
 
       // 3. Redirect to Auth0's logout endpoint to clear the SSO session
       //const returnTo = encodeURIComponent('http://localhost:3000/');
-	    var returnTo = `${req.protocol}://${req.get('host')}`;
+	    //var returnTo = `${req.protocol}://${req.get('host')}`;
+		var returnTo = process.env.APP_BASE_URL;
 		console.log('Logout route triggered,', returnTo);
-  const port = req.connection.localPort;
-  console.log('Logout port,', port);
-  if (port !== undefined && port !== 80 && port !== 443 && port!= 3000) {
-    returnTo += ':' + port;
-  }
+  //const port = req.connection.localPort;
+  //console.log('Logout port,', port);
+ // if (port !== undefined && port !== 80 && port !== 443 && port!= 3000) {
+   // returnTo += ':' + port;
+  //}
 	  console.log('Logout return to ', returnTo);
       const logoutURL = `https://${process.env.AUTH0_DOMAIN}/v2/logout?client_id=${process.env.AUTH0_CLIENT_ID}&returnTo=${returnTo}`;
       
