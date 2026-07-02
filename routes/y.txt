@@ -1,0 +1,291 @@
+function login(identifierValue, password, callback) {
+      console.log('________________________________LOGIN SCRIPTS CALLED');
+      const crypto = require('crypto');
+      const fetch = require('node-fetch');
+  
+      // --- Auth0 Configuration ---
+      const AUTH0_INTERNAL_ID = configuration.AUTH0_INTERNAL_ID;
+      const AUTH0_INTERNAL_SECRET = configuration.AUTH0_INTERNAL_SECRET;
+      const AUTH0_DOMAIN = configuration.AUTH0_DOMAIN;
+			const MULESOFT_API_AUD = configuration.MULESOFT_API_AUD;
+      // --- External SSO/API Configuration ---
+      const LEGACY_SSO_CLIENT_ID = configuration.LEGACY_SSO_CLIENT_ID;
+      const LEGACY_SSO_CLIENT_SECRET = configuration.LEGACY_SSO_CLIENT_SECRET;
+      const LEGACY_SSO_TOKEN_ENDPOINT = configuration.LEGACY_SSO_TOKEN_ENDPOINT;
+
+      const EXP_SSO_ENDPOINT = configuration.EXP_SSO_ENDPOINT;
+      const EXP_BASEPATH_1 = configuration.EXP_BASEPATH_1;
+
+      const EXP_CLIENT_ID = configuration.EXP_CLIENT_ID;
+      const EXP_CLIENT_SECRET = configuration.EXP_CLIENT_SECRET;
+      const CLIENT_TRACE_GUID = crypto.randomUUID();
+  
+    console.log('printing constant values:');
+    console.log('CLIENT_TRACE_GUID:', CLIENT_TRACE_GUID);
+
+      let accessToken;
+      let auth0AccessToken;
+      let userData = {};
+
+      // ========== NEW: Fetch with timeout helper ==========
+      async function fetchWithTimeout(url, options, timeoutMs) {
+          return Promise.race([
+              fetch(url, options),
+              new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+              )
+          ]);
+      }
+
+      // ========== NEW: Safe JSON parse ==========
+      async function safeJsonParse(response) {
+          try {
+              return await response.json();
+          } catch (error) {
+              console.error('JSON parse error:', error.message);
+              return null;
+          }
+      }
+
+      async function executeLoginFlow() {
+          try {
+              // NEW: Input validation
+              if (!identifierValue || !password) {
+                  return callback(new Error('Invalid credentials'));
+              }
+
+              // Step 1: Get SSO Token
+              //accessToken = await getSSOToken();
+            
+                  // Step 1.1: Get SSO Token
+              auth0AccessToken = await getAuth0Token();
+
+              // Step 2: Authenticate User
+              await authenticateUser();
+
+              // Step 3: Get Combined Okta Profile
+              await getOktaProfile();
+
+              // Step 4: Final Callback
+              finalCallback();
+
+          } catch (error) {
+              console.error('Login Flow Error:', error.message);
+              return callback(error);
+          }
+      }
+
+      async function getSSOToken() {
+          try {
+              const TOKEN_URL = `${LEGACY_SSO_TOKEN_ENDPOINT}?grant_type=client_credentials&client_id=${encodeURIComponent(LEGACY_SSO_CLIENT_ID)}&client_secret=${encodeURIComponent(LEGACY_SSO_CLIENT_SECRET)}`;
+
+              const response = await fetchWithTimeout(TOKEN_URL, { method: 'GET' }, 5000);
+              const tokenBody = await safeJsonParse(response);
+
+              if (response.status !== 200 || !tokenBody || !tokenBody.access_token) {
+                  throw new Error('Customer SSO Authentication failed.');
+              }
+              return tokenBody.access_token;
+          } catch (error) {
+              // CHANGED: Replace error message entirely - don't expose URL or details
+              console.error('[SSO Token] Error details:', error.message); // Log original error for debugging
+              throw new Error('Authentication service unavailable');
+          }
+      }
+
+    
+      // ----------------------------------------------------------------------
+    // 1.1 PERFORM Auth0 CLIENT CREDENTIALS (M2M) GRANT
+    // ----------------------------------------------------------------------
+    async function getAuth0Token() {
+  
+      const TOKEN_URL = `${AUTH0_DOMAIN}oauth/token`;
+      const response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_id: AUTH0_INTERNAL_ID,
+          client_secret: AUTH0_INTERNAL_SECRET,
+          audience: MULESOFT_API_AUD
+        })
+      });
+      
+        const tokenBody = await response.json().catch(() => ({}));
+      
+
+        if (response.status !== 200) {
+            const error = new Error('auth0 token failed.');
+            error.data = tokenBody;
+            throw error;
+        }
+
+        const token = tokenBody.access_token;
+        if (!token) {
+            throw new Error('Token response successful but missing access_token.');
+        }
+        
+       
+        return token;
+    }
+
+      async function authenticateUser() {
+          try {
+              const API1_URL = `${EXP_SSO_ENDPOINT}${EXP_BASEPATH_1}constituent/authenticate`;
+              const response = await fetchWithTimeout(API1_URL, {
+                  method: 'POST',
+                  headers: {
+                      'Authorization': `Bearer ${auth0AccessToken}`,
+                      'Content-Type': 'application/json',
+                      'client_id': EXP_CLIENT_ID,
+                      'client_secret': EXP_CLIENT_SECRET,
+                      'client_trace_guid': CLIENT_TRACE_GUID
+                  },
+                  body: JSON.stringify({ "userId": identifierValue, "password": password })
+              }, 8000);
+
+              const api1Body = await safeJsonParse(response);
+
+              if (response.status !== 200 || !api1Body || !api1Body.success || !api1Body.result) {
+                 //return callback(null, null); // ✅ invalid credentials
+                throw new Error('Wrong username or password.');
+              }
+
+              userData.constituentId = api1Body.result.constituentId;
+              userData.username = api1Body.result.userId;
+          } catch (error) {
+              // CHANGED: Log original, return generic for authentication errors
+              console.error('[Authenticate] Error details:', error.message);
+              if (error.message === 'Wrong username or password.') {
+                  throw error; // Keep user-friendly message
+              }
+              throw new Error('Authentication failed');
+          }
+      }
+
+      async function getOktaProfile() {
+          try {
+              const inputConstituentId = userData.constituentId;
+              const API2_URL = `${EXP_SSO_ENDPOINT}${EXP_BASEPATH_1}constituent/okta/profile?constituentId=${encodeURIComponent(inputConstituentId)}`;
+            
+console.log (' okta profile url', API2_URL);
+          		const headers = {
+                  'Authorization': `Bearer ${auth0AccessToken}`,
+                  'client_id': EXP_CLIENT_ID,
+                  'client_secret': EXP_CLIENT_SECRET,
+                  'client_trace_guid': CLIENT_TRACE_GUID
+              };
+            
+              const response = await fetchWithTimeout(API2_URL, {
+                  method: 'GET',
+                  headers: headers
+              }, 6000);
+
+              const api2Body = await safeJsonParse(response);
+
+              if (response.status !== 200 || !api2Body || !api2Body.success || !api2Body.result || !api2Body.result.oktaConstituentProfile) {
+                 throw new Error('Critical failure fetching user profile (API2).');
+              }
+
+              const details = api2Body.result.oktaConstituentProfile;
+            
+console.log (' is response back?????', details);
+              userData.acsid = details.userId || '';
+              userData.firstname = (details.nameInfo || {}).firstName || '';
+              userData.lastname = (details.nameInfo || {}).lastName || '';
+              userData.fullname = (details.nameInfo || {}).fullName || '';
+              userData.email = details.emailAddress || '';
+              userData.personid = details.personId || '';
+              userData.orcid = details.orcid || '';
+              userData.groups = details.groups || [];
+
+              const acsFlags = (details.profileInfo || {}).acsFlags || {};
+              userData.acsFlags = {
+                  is_member: acsFlags.isMember || false,
+                  is_paid: acsFlags.isPaid || false,
+                  has_renewal: acsFlags.hasRenewal || false,
+                  package_product_code: acsFlags.businessPackageCode || '',
+                  acsNetworkMember: acsFlags.acsNetworkMember || false,
+                  memberType: acsFlags.memberType || ''
+              };
+
+              const aact = (details.profileInfo || {}).aactFlags || {};
+              userData.aactFlags = {
+                  is_member: aact.isMember || false,
+                  is_paid: aact.isPaid || false,
+                  has_renewal: aact.hasRenewal || false,
+                  member_type: aact.memberType || ''
+              };
+
+              const fullList = details.subscriptionList || [];
+              userData.products = fullList
+                  .map(sub => sub.productCode)
+                  .filter(code => code);
+
+              userData.subscriptionlist = fullList.map(sub => ({
+                  entitlement: sub.productCode || '',
+                  order_id: sub.orderNumber || '',
+                  start_date: sub.productStartDate || '',
+                  end_date: sub.productEndDate || ''
+              }));
+
+              const localSection = (details.profileInfo || {}).localSection || {};
+              userData.localsection = {
+                  code: localSection.chpCode || '',
+                  name: localSection.chpName || '',
+                  description: localSection.chpDescription || ''
+              };
+
+              userData.divisions = (details.divisions || [])
+                  .map(div => div.chpCode)
+                  .filter(code => code);
+          } catch (error) {
+              // CHANGED: Log original, return generic for profile errors
+              console.error('[Profile] Error details:', error.message);
+              throw new Error('Unable to retrieve user profile');
+          }
+      }
+
+      function finalCallback() {
+          if (!userData.constituentId) {
+              return callback(new Error('Critical error: Constituent data missing.'));
+          }
+
+          const userProfile = {
+              user_id: userData.constituentId.toString(),
+              constituentid: userData.constituentId,
+              acsid: userData.acsid,
+              username: userData.username,
+              email: userData.email,
+              fullname: userData.fullname,
+              given_name: userData.firstname,
+              family_name: userData.lastname,
+              firstname: userData.firstname,
+              lastname: userData.lastname,
+              personid: userData.personid,
+              orcid: userData.orcid,
+              app_metadata: {
+                  entitlements: userData.subscriptionlist,
+                  products: userData.products,
+                  groups: userData.groups,
+                  localsection: userData.localsection,
+                  divisions: userData.divisions,
+                  ismember: userData.acsFlags.is_member,
+                  ispaid: userData.acsFlags.is_paid,
+                  hasrenewal: userData.acsFlags.has_renewal,
+                  packagecode: userData.acsFlags.package_product_code,
+                  isacsnetworkmember: userData.acsFlags.acsNetworkMember,
+                  membertype: userData.acsFlags.memberType,
+                  aactismember: userData.aactFlags.is_member,
+                  aactmembertype: userData.aactFlags.member_type,
+                  aacthasrenewal: userData.aactFlags.has_renewal,
+                  aactispaid: userData.aactFlags.is_paid
+              },
+          };
+
+          return callback(null, userProfile);
+      }
+
+      // Trigger the flow
+      executeLoginFlow();
+  }

@@ -35,6 +35,34 @@ var strategy = new Auth0Strategy(
   }
 );
 
+//force using params
+// 🔥 OVERRIDE THIS METHOD
+/*strategy.authorizationParams = function (options) {
+  return {
+    organization: options.organization
+  };
+};
+
+strategy.authorizationParams = function () {
+  return {
+    organization: this._org
+  };
+}
+
+strategy.authorizationParams = function () {
+  const org = this._org;
+
+  // ✅ clear immediately so callback doesn't reuse it
+  this._org = undefined;
+
+  if (org) {
+    return { organization: org };
+  }
+
+  return {};
+};
+*/
+
 passport.use(strategy);
 
 console.log(

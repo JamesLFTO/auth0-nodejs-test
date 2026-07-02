@@ -25,6 +25,43 @@ router.get('/login', passport.authenticate('auth0', {
   res.redirect('/');
 });
 
+//ldap login
+router.get('/login/staff', passport.authenticate('auth0', {
+  scope: 'openid email profile',
+  connection:'ACS-LDAP',
+}), function (req, res) {
+  res.redirect('/');
+});
+
+// Perform the aact organization login, after login Auth0 will redirect to callback
+
+
+router.get('/login/aact', (req, res, next) => {
+  const strategy = passport._strategy('auth0');
+
+  // ✅ inject org into strategy instance
+  strategy._org = 'org_SnjMrQuhJEuRO4cV';
+
+  passport.authenticate('auth0', {
+    scope: 'openid email profile'
+  })(req, res, next);
+});
+
+
+
+/*router.get('/login/aact',
+  passport.authenticate('auth0', {
+    scope: 'openid email profile',
+    authorizationParams: {
+      organization: 'org_SnjMrQuhJEuRO4cV'
+    }
+  }),
+  function (req, res) {
+    res.redirect('/');
+  }
+);
+*/
+
 router.get('/login/xchem-federate/', passport.authenticate('auth0', {
   scope: 'openid email profile',
   connection:'xchem-federate',
