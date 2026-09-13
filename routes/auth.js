@@ -121,6 +121,24 @@ router.get('/callback', function (req, res, next) {
 	  
     if (err) { return next(err); }
 	
+	/* display an error page on this app
+	if (!user && info === 'access_denied') {
+		return res.status(403).send(`
+		<h1>Access Denied</h1>
+		<p>Authentication was denied by Auth0.</p>
+		`);
+	}
+	
+	*/
+	
+	//option 1 display msg on application login page
+	
+	if (!user && info === 'access_denied') {
+		return res.redirect(
+		'/login?error=Authentication failed. Please contact support at support@services.acs.org'
+		);
+	}
+	
     if (!user) { return res.redirect('/login'); }
 	
     req.logIn(user, function (err) {
