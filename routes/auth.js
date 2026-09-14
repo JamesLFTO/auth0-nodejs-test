@@ -190,6 +190,10 @@ router.get('/logout', (req, res, next) => {
 	    //var returnTo = `${req.protocol}://${req.get('host')}`;
 		var returnTo = process.env.APP_BASE_URL;
 		console.log('Logout route triggered,', returnTo);
+				console.log('Logout route triggered,', returnTo);
+		console.log('protocol =', req.protocol);
+		console.log('host =', req.get('host'));
+		console.log('headers.host =', req.headers.host);
   //const port = req.connection.localPort;
   //console.log('Logout port,', port);
  // if (port !== undefined && port !== 80 && port !== 443 && port!= 3000) {
