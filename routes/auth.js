@@ -188,9 +188,8 @@ router.get('/logout', (req, res, next) => {
       // 3. Redirect to Auth0's logout endpoint to clear the SSO session
       //const returnTo = encodeURIComponent('http://localhost:3000/');
 	    var returnTo = `${req.protocol}://${req.get('host')}`;
-		var returnTo = process.env.APP_BASE_URL;
+		//var returnTo = process.env.APP_BASE_URL;
 		console.log('Logout route triggered,', returnTo);
-				console.log('Logout route triggered,', returnTo);
 		console.log('protocol =', req.protocol);
 		console.log('host =', req.get('host'));
 		console.log('headers.host =', req.headers.host);
